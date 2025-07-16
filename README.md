@@ -1,0 +1,1 @@
+to run python3.11 amazon_usecase/main.py
