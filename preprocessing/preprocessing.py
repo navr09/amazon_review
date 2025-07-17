@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Tuple
 import logging
 from utils.column_converter import convert_columns
+from utils.text_cleaner import clean_review_text
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,8 @@ class DataPreprocessor:
         """Filter data by date range"""
         try:
             self.df = self.df[(self.df['review_date'].dt.year >= start_year) & (self.df['review_date'].dt.year <= end_year)]
+            # Adding filter for total votes >3
+            self.df = self.df[self.df['total_votes']>=3]
             logger.info(f"Filtered to {len(self.df)} rows between {start_year}-{end_year}")
             return self.df
         except Exception as e:
@@ -54,6 +57,15 @@ class DataPreprocessor:
             self.df['helpful_votes'] / self.df['total_votes'],
             np.nan)
             logger.info(f"Created target column: helpfulness_ratio")
+            return self.df
+        except Exception as e:
+            logger.error(f"Date filtering failed: {str(e)}")
+            raise
+    
+    def clean_review(self):
+        try:
+            self.df['cleaned_review'] = self.df['review_body'].apply(clean_review_text)
+            logger.info(f"Processed review body")
             return self.df
         except Exception as e:
             logger.error(f"Date filtering failed: {str(e)}")
@@ -90,6 +102,7 @@ class DataPreprocessor:
             self.convert_columns([(['review_date'], 'datetime')])
             self.filter_by_date(2003, 2005)
             self.target_creation()
+            self.clean_review()
             self.remove_duplicates()
             return self.df
         except Exception as e:

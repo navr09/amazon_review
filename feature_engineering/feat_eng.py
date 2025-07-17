@@ -5,7 +5,6 @@ from textblob import TextBlob
 from sklearn.feature_extraction.text import TfidfVectorizer
 from typing import List, Optional
 import logging
-from utils.text_cleaner import clean_review_text
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +20,19 @@ class FeatureEngineer:
             # Length features
             self.df['title_length'] = self.df['product_title'].str.len()
             self.df['headline_length'] = self.df['review_headline'].str.len()
-            self.df['body_length'] = self.df['review_body'].str.len()
-            self.df['body_word_count'] = self.df['review_body'].str.split().str.len()
+            self.df['body_length'] = self.df['cleaned_review'].str.len()
+            self.df['body_word_count'] = self.df['cleaned_review'].str.split().str.len()
+            self.df['exclamation_count'] = self.df['cleaned_review'].str.count('!')
+            self.df['question_count'] = self.df['cleaned_review'].str.count('\?')
+            self.df['allcaps_count'] = self.df['cleaned_review'].str.findall(r'\b[A-Z]{2,}\b').str.len()
             
             # Sentiment analysis
-            self.df['polarity'] = self.df['review_body'].apply(
+            self.df['polarity'] = self.df['cleaned_review'].apply(
                 lambda x: TextBlob(str(x)).sentiment.polarity
             )
-            self.df['subjectivity'] = self.df['review_body'].apply(
+            self.df['subjectivity'] = self.df['cleaned_review'].apply(
                 lambda x: TextBlob(str(x)).sentiment.subjectivity
             )
-            
-            # Cleaned text
-            self.df['cleaned_review'] = self.df['review_body'].apply(clean_review_text)
             
             logger.info("Basic text features created")
             return self.df
@@ -47,12 +46,19 @@ class FeatureEngineer:
         """Create TF-IDF based features"""
         try:
             # Initialize vectorizer
+            # self.tfidf = TfidfVectorizer(
+            #     stop_words='english',
+            #     min_df=50,
+            #     max_df=0.7,
+            #     ngram_range=(1, 2),
+            #     dtype=np.float32  # Reduce memory usage
+            # )
             self.tfidf = TfidfVectorizer(
                 stop_words='english',
-                min_df=50,
-                max_df=0.7,
+                min_df=10,          # Reduced from 50 to capture more meaningful but less frequent terms
+                max_df=0.6,         # Slightly more aggressive than 0.7 to filter very common terms
                 ngram_range=(1, 2),
-                dtype=np.float32  # Reduce memory usage
+                dtype=np.float32
             )
             
             # Fit on cleaned reviews
@@ -123,7 +129,9 @@ class FeatureEngineer:
             raise
 
     def create_helpfulness_signal(self) -> pd.DataFrame:
-        """Create final helpfulness signal feature"""
+        """Create final helpfulness signal feature by difference of helpful and unhelpful score
+            for each row and adding deff weights to it. 
+        """
         try:
             if self.tfidf is None or self.word_comparison is None:
                 raise ValueError("Must run create_tfidf_features() first")
@@ -138,7 +146,11 @@ class FeatureEngineer:
             tfidf_features = self.tfidf.transform(self.df['cleaned_review'])
             weighted_tfidf = tfidf_features.multiply(word_weights.values)
             self.df['helpfulness_signal'] = np.array(weighted_tfidf.sum(axis=1)).flatten()
-            
+            self.df['enhanced_helpfulness'] = (
+                self.df['helpfulness_signal'] * 
+                np.log1p(self.df['body_word_count']) * 
+                (1 + self.df['polarity'])
+            )
             logger.info("Helpfulness signal feature created")
             return self.df
         except Exception as e:
