@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from preprocessing.preprocessing import DataPreprocessor
-# from feature_engineering import FeatureEngineer
+from feature_engineering.feat_eng import FeatureEngineer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,8 +19,8 @@ def main():
         print(df_clean.shape)
 
         # Feature Engineering
-        # engineer = FeatureEngineer(df_clean)
-        # df_features = engineer.run_pipeline()
+        engineer = FeatureEngineer(df_clean)
+        df_features = engineer.run_pipeline()
         
         # Save processed data
         # df_features.to_parquet('../data/processed_reviews.parquet')
